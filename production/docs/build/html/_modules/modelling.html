@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>modelling &mdash; capstone_project_documentation 0.0.2 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            capstone_project_documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"></div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">capstone_project_documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">modelling</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for modelling</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">ta_lib.regression.api</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">RegressionReport</span><span class="p">,</span>
+    <span class="n">SKLStatsmodelOLS</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># standard code-template imports</span>
+<span class="kn">from</span> <span class="nn">ta_lib.core.api</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DEFAULT_ARTIFACTS_PATH</span><span class="p">,</span>
+    <span class="n">create_context</span><span class="p">,</span>
+    <span class="n">initialize_environment</span><span class="p">,</span>
+    <span class="n">load_dataset</span><span class="p">,</span>
+    <span class="n">save_dataset</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">xgboost</span> <span class="kn">import</span> <span class="n">XGBRegressor</span>
+<span class="kn">import</span> <span class="nn">os.path</span> <span class="k">as</span> <span class="nn">op</span>
+<span class="c1"># standard third party imports</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">from</span> <span class="nn">sklearn.ensemble</span> <span class="kn">import</span> <span class="n">RandomForestRegressor</span>
+<span class="c1"># impute missing values</span>
+<span class="kn">from</span> <span class="nn">sklearn.experimental</span> <span class="kn">import</span> <span class="n">enable_iterative_imputer</span>  <span class="c1"># noqa</span>
+<span class="kn">from</span> <span class="nn">sklearn.model_selection</span> <span class="kn">import</span> <span class="n">GridSearchCV</span><span class="p">,</span> <span class="n">train_test_split</span>
+<span class="kn">from</span> <span class="nn">sklearn.pipeline</span> <span class="kn">import</span> <span class="n">Pipeline</span>
+<span class="kn">from</span> <span class="nn">sklearn.preprocessing</span> <span class="kn">import</span> <span class="n">FunctionTransformer</span>
+<span class="kn">from</span> <span class="nn">sklearn.tree</span> <span class="kn">import</span> <span class="n">DecisionTreeRegressor</span>
+
+<span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span>
+    <span class="s2">&quot;ignore&quot;</span><span class="p">,</span>
+    <span class="n">message</span><span class="o">=</span><span class="s2">&quot;pandas.Int64Index is deprecated and will be removed from pandas in a future version. Use pandas.Index with the appropriate dtype instead.&quot;</span><span class="p">,</span>
+    <span class="n">category</span><span class="o">=</span><span class="ne">FutureWarning</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span>
+    <span class="s2">&quot;ignore&quot;</span><span class="p">,</span>
+    <span class="n">message</span><span class="o">=</span><span class="s2">&quot;pandas.Float64Index is deprecated and will be removed from pandas in a future version. Use pandas.Index with the appropriate dtype instead.&quot;</span><span class="p">,</span>
+    <span class="n">category</span><span class="o">=</span><span class="ne">FutureWarning</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">initialize_environment</span><span class="p">(</span><span class="n">debug</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">hide_warnings</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">artifacts_folder</span> <span class="o">=</span> <span class="n">DEFAULT_ARTIFACTS_PATH</span>
+
+<span class="n">config_path</span> <span class="o">=</span> <span class="n">op</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;/home/rassel/capstone_code_templates_springboard/production/conf&#39;</span><span class="p">,</span> <span class="s1">&#39;config.yml&#39;</span><span class="p">)</span>
+<span class="n">context</span> <span class="o">=</span> <span class="n">create_context</span><span class="p">(</span><span class="n">config_path</span><span class="p">)</span>
+
+<span class="n">ground_truth_for_modelling</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span>
+    <span class="n">context</span><span class="p">,</span> <span class="s2">&quot;/ground_truth_for_modelling/ground_truth&quot;</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="create_price_variables"><a class="viewcode-back" href="../modelling.html#modelling.create_price_variables">[docs]</a><span class="k">def</span> <span class="nf">create_price_variables</span><span class="p">(</span><span class="n">dataframe</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create price related variables</span>
+
+<span class="sd">    Arguments</span>
+<span class="sd">    ---------</span>
+<span class="sd">    dataframe : pd.DataFrame</span>
+<span class="sd">        The dataframe to use for creating the price related variables.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dataframe</span>
+<span class="sd">        The processed dataframe</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">temp_dataframe</span> <span class="o">=</span> <span class="n">dataframe</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">temp_dataframe</span><span class="p">[</span><span class="s2">&quot;client_unit_price&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">temp_dataframe</span><span class="p">[</span><span class="s2">&quot;client_dollars_value&quot;</span><span class="p">]</span>
+        <span class="o">/</span> <span class="n">temp_dataframe</span><span class="p">[</span><span class="s2">&quot;client_units_value&quot;</span><span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">temp_dataframe</span><span class="p">[</span><span class="s2">&quot;competitor_unit_price&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">temp_dataframe</span><span class="p">[</span><span class="s2">&quot;competitor_dollars_value&quot;</span><span class="p">]</span>
+        <span class="o">/</span> <span class="n">temp_dataframe</span><span class="p">[</span><span class="s2">&quot;competitor_units_value&quot;</span><span class="p">]</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">temp_dataframe</span></div>
+
+
+<span class="n">ground_truth_for_modelling</span> <span class="o">=</span> <span class="n">create_price_variables</span><span class="p">(</span><span class="n">ground_truth_for_modelling</span><span class="p">)</span>
+<span class="n">ground_truth_for_modelling</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Unnamed: 0&quot;</span><span class="p">],</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+
+<span class="n">numerical_features</span> <span class="o">=</span> <span class="n">ground_truth_for_modelling</span><span class="o">.</span><span class="n">select_dtypes</span><span class="p">(</span><span class="n">include</span><span class="o">=</span><span class="s2">&quot;number&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="create_train_and_test_split"><a class="viewcode-back" href="../modelling.html#modelling.create_train_and_test_split">[docs]</a><span class="k">def</span> <span class="nf">create_train_and_test_split</span><span class="p">(</span><span class="n">dataframe</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates train and test related dataframes.</span>
+
+<span class="sd">    Arguments</span>
+<span class="sd">    ---------</span>
+<span class="sd">    dataframe : pd.DataFrame</span>
+<span class="sd">        The base dataframe to use for getting the train and test splits.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple</span>
+<span class="sd">        The tuple of dataframes after the train and test split has been done.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">dataframe</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;client_lbs_value&quot;</span><span class="p">])</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">dataframe</span><span class="p">[</span><span class="s2">&quot;client_lbs_value&quot;</span><span class="p">]</span>
+
+    <span class="n">X_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="n">y_test</span> <span class="o">=</span> <span class="n">train_test_split</span><span class="p">(</span>
+        <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">test_size</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">X_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="n">y_test</span></div>
+
+
+<span class="n">X_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="n">y_test</span> <span class="o">=</span> <span class="n">create_train_and_test_split</span><span class="p">(</span><span class="n">ground_truth_for_modelling</span><span class="p">)</span>
+
+<span class="n">save_dataset</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">X_train</span><span class="p">,</span> <span class="s2">&quot;/train/ground_truth_for_modelling/features&quot;</span><span class="p">)</span>
+<span class="n">save_dataset</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="s2">&quot;/train/ground_truth_for_modelling/target&quot;</span><span class="p">)</span>
+<span class="n">save_dataset</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="s2">&quot;/test/ground_truth_for_modelling/features&quot;</span><span class="p">)</span>
+<span class="n">save_dataset</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">y_test</span><span class="p">,</span> <span class="s2">&quot;/test/ground_truth_for_modelling/target&quot;</span><span class="p">)</span>
+
+<span class="c1"># collecting different types of columns for transformations</span>
+<span class="n">cat_columns</span> <span class="o">=</span> <span class="n">X_train</span><span class="o">.</span><span class="n">select_dtypes</span><span class="p">(</span><span class="s2">&quot;object&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">columns</span>
+<span class="n">num_columns</span> <span class="o">=</span> <span class="n">X_train</span><span class="o">.</span><span class="n">select_dtypes</span><span class="p">(</span><span class="s2">&quot;number&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">columns</span>
+
+
+<div class="viewcode-block" id="one_hot_encode_column"><a class="viewcode-back" href="../modelling.html#modelling.one_hot_encode_column">[docs]</a><span class="k">def</span> <span class="nf">one_hot_encode_column</span><span class="p">(</span><span class="n">dataframe</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">cat_variable</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    One hot encodes the categorical column specified.</span>
+
+<span class="sd">    Arguments</span>
+<span class="sd">    ---------</span>
+<span class="sd">    dataframe : pd.DataFrame</span>
+<span class="sd">        The dataframe to use.</span>
+<span class="sd">    cat_variable: str</span>
+<span class="sd">        The categorical variable to one hot encode.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dataframe</span>
+<span class="sd">        The one hot encoded dataframe</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">one_hot</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">get_dummies</span><span class="p">(</span><span class="n">dataframe</span><span class="p">[</span><span class="n">cat_variable</span><span class="p">],</span> <span class="n">drop_first</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1"># Drop column B as it is now encoded</span>
+    <span class="n">dataframe</span> <span class="o">=</span> <span class="n">dataframe</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="s2">&quot;theme_name&quot;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># Join the encoded df</span>
+    <span class="n">dataframe</span> <span class="o">=</span> <span class="n">dataframe</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">one_hot</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">dataframe</span></div>
+
+
+<div class="viewcode-block" id="engineer_date_related_features"><a class="viewcode-back" href="../modelling.html#modelling.engineer_date_related_features">[docs]</a><span class="k">def</span> <span class="nf">engineer_date_related_features</span><span class="p">(</span><span class="n">dataframe</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Engineers date related features.</span>
+
+<span class="sd">    Arguments</span>
+<span class="sd">    ---------</span>
+<span class="sd">    dataframe : pd.DataFrame</span>
+<span class="sd">        The dataframe to use for engineering the date related features.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dataframe</span>
+<span class="sd">        The dataframe with the engineered features.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">temp_dataframe</span> <span class="o">=</span> <span class="n">dataframe</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">temp_dataframe</span><span class="p">[</span><span class="s2">&quot;date&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">(</span><span class="n">temp_dataframe</span><span class="p">[</span><span class="s2">&quot;date&quot;</span><span class="p">])</span>
+    <span class="n">temp_dataframe</span><span class="p">[</span><span class="s2">&quot;year&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">temp_dataframe</span><span class="p">[</span><span class="s2">&quot;date&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">dt</span><span class="o">.</span><span class="n">year</span>
+    <span class="n">temp_dataframe</span><span class="p">[</span><span class="s2">&quot;month&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">temp_dataframe</span><span class="o">.</span><span class="n">date</span><span class="o">.</span><span class="n">dt</span><span class="o">.</span><span class="n">month</span>
+    <span class="n">temp_dataframe</span><span class="p">[</span><span class="s2">&quot;quarter&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">temp_dataframe</span><span class="o">.</span><span class="n">date</span><span class="o">.</span><span class="n">dt</span><span class="o">.</span><span class="n">quarter</span>
+    <span class="n">temp_dataframe</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;date&quot;</span><span class="p">],</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">temp_dataframe</span></div>
+
+
+<span class="n">train_one_hot_encoder_transformer</span> <span class="o">=</span> <span class="n">FunctionTransformer</span><span class="p">(</span>
+    <span class="n">one_hot_encode_column</span><span class="p">,</span> <span class="n">kw_args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;cat_variable&quot;</span><span class="p">:</span> <span class="s2">&quot;theme_name&quot;</span><span class="p">}</span>
+<span class="p">)</span>
+<span class="n">test_one_hot_encoder_transformer</span> <span class="o">=</span> <span class="n">FunctionTransformer</span><span class="p">(</span>
+    <span class="n">one_hot_encode_column</span><span class="p">,</span> <span class="n">kw_args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;cat_variable&quot;</span><span class="p">:</span> <span class="s2">&quot;theme_name&quot;</span><span class="p">}</span>
+<span class="p">)</span>
+<span class="n">date_feature_generator</span> <span class="o">=</span> <span class="n">FunctionTransformer</span><span class="p">(</span><span class="n">engineer_date_related_features</span><span class="p">)</span>
+
+<span class="n">feature_engineering_pipeline_train</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span><span class="s2">&quot;one_hot_encoding&quot;</span><span class="p">,</span> <span class="n">train_one_hot_encoder_transformer</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;date_feature_generator&quot;</span><span class="p">,</span> <span class="n">date_feature_generator</span><span class="p">),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+<span class="n">feature_engineering_pipeline_test</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span><span class="s2">&quot;one_hot_encoding&quot;</span><span class="p">,</span> <span class="n">test_one_hot_encoder_transformer</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;date_feature_generator&quot;</span><span class="p">,</span> <span class="n">date_feature_generator</span><span class="p">),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+
+<span class="n">X_train</span> <span class="o">=</span> <span class="n">feature_engineering_pipeline_train</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X_train</span><span class="p">)</span>
+<span class="n">X_test</span> <span class="o">=</span> <span class="n">feature_engineering_pipeline_test</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X_test</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="create_final_set_of_training_and_test_datasets"><a class="viewcode-back" href="../modelling.html#modelling.create_final_set_of_training_and_test_datasets">[docs]</a><span class="k">def</span> <span class="nf">create_final_set_of_training_and_test_datasets</span><span class="p">(</span><span class="n">train_df</span> <span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">test_df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create the final training and test datasets.</span>
+
+<span class="sd">    Arguments</span>
+<span class="sd">    ---------</span>
+<span class="sd">    train_df : pd.DataFrame</span>
+<span class="sd">        The train dataframe</span>
+<span class="sd">    test_df : pd.DataFrame</span>
+<span class="sd">        The test dataframe</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple</span>
+<span class="sd">        The tuple of the final training and test datasets.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">columns_to_drop</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;chewy_searchVolume&quot;</span><span class="p">,</span> <span class="s2">&quot;total_searchVolume&quot;</span><span class="p">]</span>
+    <span class="n">train_df</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">columns_to_drop</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">test_df</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">columns_to_drop</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">reg_vars</span> <span class="o">=</span> <span class="n">train_df</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">train_df</span> <span class="o">=</span> <span class="n">train_df</span><span class="p">[</span><span class="n">reg_vars</span><span class="p">]</span>
+    <span class="n">test_df</span> <span class="o">=</span> <span class="n">test_df</span><span class="p">[</span><span class="n">reg_vars</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">train_df</span><span class="p">,</span> <span class="n">test_df</span><span class="p">,</span> <span class="n">reg_vars</span></div>
+
+
+<span class="n">X_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">reg_vars</span> <span class="o">=</span> <span class="n">create_final_set_of_training_and_test_datasets</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">)</span>
+
+
+<span class="c1"># Custom Transformations like these can be utilised</span>
+<span class="k">def</span> <span class="nf">_custom_data_transform</span><span class="p">(</span><span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">cols2keep</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Transformation to drop some columns in the data</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">        df - pd.DataFrame</span>
+<span class="sd">        cols2keep - columns to keep in the dataframe</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">cols2keep</span> <span class="o">=</span> <span class="n">cols2keep</span> <span class="ow">or</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cols2keep</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">select_columns</span><span class="p">(</span><span class="n">cols2keep</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+
+<span class="n">imp_features</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;client_unit_price&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;competitor_unit_price&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;total_post&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;google_searchVolume&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="n">reg_ppln_ols</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">FunctionTransformer</span><span class="p">(</span>
+                <span class="n">_custom_data_transform</span><span class="p">,</span> <span class="n">kw_args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;cols2keep&quot;</span><span class="p">:</span> <span class="n">reg_vars</span><span class="p">}</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;estimator&quot;</span><span class="p">,</span> <span class="n">SKLStatsmodelOLS</span><span class="p">()),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+<span class="n">reg_ppln_ols</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">ravel</span><span class="p">())</span>
+
+<span class="n">reg_ppln_ols</span><span class="p">[</span><span class="s2">&quot;estimator&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">summary</span><span class="p">()</span>
+
+<span class="n">reg_ppln</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">FunctionTransformer</span><span class="p">(</span>
+                <span class="n">_custom_data_transform</span><span class="p">,</span> <span class="n">kw_args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;cols2keep&quot;</span><span class="p">:</span> <span class="n">reg_vars</span><span class="p">}</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;Linear Regression&quot;</span><span class="p">,</span> <span class="n">SKLStatsmodelOLS</span><span class="p">()),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+
+<span class="n">reg_linear_report</span> <span class="o">=</span> <span class="n">RegressionReport</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">reg_ppln</span><span class="p">,</span>
+    <span class="n">x_train</span><span class="o">=</span><span class="n">X_train</span><span class="p">,</span>
+    <span class="n">y_train</span><span class="o">=</span><span class="n">y_train</span><span class="p">,</span>
+    <span class="n">x_test</span><span class="o">=</span><span class="n">X_test</span><span class="p">,</span>
+    <span class="n">y_test</span><span class="o">=</span><span class="n">y_test</span><span class="p">,</span>
+    <span class="n">refit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">reg_linear_report</span><span class="o">.</span><span class="n">get_report</span><span class="p">(</span>
+    <span class="n">include_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">file_path</span><span class="o">=</span><span class="s2">&quot;regression_linear_model_report&quot;</span>
+<span class="p">)</span>
+
+
+<span class="n">parameters</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;max_features&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">5</span><span class="p">],</span>
+    <span class="s2">&quot;min_samples_split&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span>
+    <span class="s2">&quot;max_depth&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span>
+    <span class="s2">&quot;ccp_alpha&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">],</span>
+<span class="p">}</span>
+<span class="n">est</span> <span class="o">=</span> <span class="n">DecisionTreeRegressor</span><span class="p">()</span>
+<span class="n">dtreg_grid</span> <span class="o">=</span> <span class="n">GridSearchCV</span><span class="p">(</span><span class="n">est</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">cv</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">dtreg_grid</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">dtreg_grid</span><span class="o">.</span><span class="n">best_score_</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">dtreg_grid</span><span class="o">.</span><span class="n">best_params_</span><span class="p">)</span>
+
+<span class="n">decision_tree</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">FunctionTransformer</span><span class="p">(</span>
+                <span class="n">_custom_data_transform</span><span class="p">,</span> <span class="n">kw_args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;cols2keep&quot;</span><span class="p">:</span> <span class="n">imp_features</span><span class="p">}</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;Decision Tree&quot;</span><span class="p">,</span> <span class="n">dtreg_grid</span><span class="o">.</span><span class="n">best_estimator_</span><span class="p">),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+<span class="n">decision_tree</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
+
+<span class="n">decision_tree_report</span> <span class="o">=</span> <span class="n">RegressionReport</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">decision_tree</span><span class="p">,</span>
+    <span class="n">x_train</span><span class="o">=</span><span class="n">X_train</span><span class="p">,</span>
+    <span class="n">y_train</span><span class="o">=</span><span class="n">y_train</span><span class="p">,</span>
+    <span class="n">x_test</span><span class="o">=</span><span class="n">X_test</span><span class="p">,</span>
+    <span class="n">y_test</span><span class="o">=</span><span class="n">y_test</span><span class="p">,</span>
+    <span class="n">refit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">decision_tree_report</span><span class="o">.</span><span class="n">get_report</span><span class="p">(</span><span class="n">include_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">file_path</span><span class="o">=</span><span class="s2">&quot;decision_tree_report&quot;</span><span class="p">)</span>
+
+
+<span class="n">parameters</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;n_estimators&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">100</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">300</span><span class="p">],</span>
+    <span class="s2">&quot;min_samples_split&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span>
+    <span class="s2">&quot;max_depth&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span>
+    <span class="s2">&quot;ccp_alpha&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">],</span>
+    <span class="s2">&quot;bootstrap&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">],</span>
+<span class="p">}</span>
+<span class="n">est</span> <span class="o">=</span> <span class="n">RandomForestRegressor</span><span class="p">()</span>
+<span class="n">rf_grid</span> <span class="o">=</span> <span class="n">GridSearchCV</span><span class="p">(</span><span class="n">est</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">cv</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">rf_grid</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">rf_grid</span><span class="o">.</span><span class="n">best_score_</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">rf_grid</span><span class="o">.</span><span class="n">best_params_</span><span class="p">)</span>
+
+<span class="n">random_forest</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">FunctionTransformer</span><span class="p">(</span>
+                <span class="n">_custom_data_transform</span><span class="p">,</span> <span class="n">kw_args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;cols2keep&quot;</span><span class="p">:</span> <span class="n">imp_features</span><span class="p">}</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;Random Forest&quot;</span><span class="p">,</span> <span class="n">rf_grid</span><span class="o">.</span><span class="n">best_estimator_</span><span class="p">),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+<span class="n">random_forest</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
+
+<span class="n">rf_report</span> <span class="o">=</span> <span class="n">RegressionReport</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">random_forest</span><span class="p">,</span>
+    <span class="n">x_train</span><span class="o">=</span><span class="n">X_train</span><span class="p">,</span>
+    <span class="n">y_train</span><span class="o">=</span><span class="n">y_train</span><span class="p">,</span>
+    <span class="n">x_test</span><span class="o">=</span><span class="n">X_test</span><span class="p">,</span>
+    <span class="n">y_test</span><span class="o">=</span><span class="n">y_test</span><span class="p">,</span>
+    <span class="n">refit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">rf_report</span><span class="o">.</span><span class="n">get_report</span><span class="p">(</span><span class="n">include_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">file_path</span><span class="o">=</span><span class="s2">&quot;random_forest_report&quot;</span><span class="p">)</span>
+
+<span class="n">parameters</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;n_estimators&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">100</span><span class="p">],</span>
+    <span class="s2">&quot;min_samples_split&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">5</span><span class="p">],</span>
+    <span class="s2">&quot;bootstrap&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">],</span>
+<span class="p">}</span>
+<span class="n">est</span> <span class="o">=</span> <span class="n">XGBRegressor</span><span class="p">()</span>
+<span class="n">xgb_grid</span> <span class="o">=</span> <span class="n">GridSearchCV</span><span class="p">(</span><span class="n">est</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">cv</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">xgb_grid</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">xgb_grid</span><span class="o">.</span><span class="n">best_score_</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">xgb_grid</span><span class="o">.</span><span class="n">best_params_</span><span class="p">)</span>
+
+<span class="n">xgboost</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">FunctionTransformer</span><span class="p">(</span>
+                <span class="n">_custom_data_transform</span><span class="p">,</span> <span class="n">kw_args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;cols2keep&quot;</span><span class="p">:</span> <span class="n">imp_features</span><span class="p">}</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;XGBoost&quot;</span><span class="p">,</span> <span class="n">xgb_grid</span><span class="o">.</span><span class="n">best_estimator_</span><span class="p">),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+<span class="n">xgboost</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
+
+<span class="n">xgb_report</span> <span class="o">=</span> <span class="n">RegressionReport</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">xgboost</span><span class="p">,</span>
+    <span class="n">x_train</span><span class="o">=</span><span class="n">X_train</span><span class="p">,</span>
+    <span class="n">y_train</span><span class="o">=</span><span class="n">y_train</span><span class="p">,</span>
+    <span class="n">x_test</span><span class="o">=</span><span class="n">X_test</span><span class="p">,</span>
+    <span class="n">y_test</span><span class="o">=</span><span class="n">y_test</span><span class="p">,</span>
+    <span class="n">refit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">xgb_report</span><span class="o">.</span><span class="n">get_report</span><span class="p">(</span><span class="n">include_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">file_path</span><span class="o">=</span><span class="s2">&quot;xgb_report&quot;</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Prabhat,Rassel,Rajat.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

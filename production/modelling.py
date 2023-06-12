@@ -1,29 +1,27 @@
-import os
+from ta_lib.regression.api import (
+    RegressionReport,
+    SKLStatsmodelOLS,
+)
+# standard code-template imports
+from ta_lib.core.api import (
+    DEFAULT_ARTIFACTS_PATH,
+    create_context,
+    initialize_environment,
+    load_dataset,
+    save_dataset,
+)
+from xgboost import XGBRegressor
 import os.path as op
-import shutil
-
 # standard third party imports
-import numpy as np
 import pandas as pd
-import seaborn as sns
-from matplotlib import pyplot as plt
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
-from sklearn.feature_selection import SelectFromModel
-from sklearn.model_selection import GridSearchCV
-from sklearn.preprocessing import FunctionTransformer
-from sklearn.compose import ColumnTransformer
-
+import warnings
+from sklearn.ensemble import RandomForestRegressor
 # impute missing values
 from sklearn.experimental import enable_iterative_imputer  # noqa
-from sklearn.impute import KNNImputer, IterativeImputer, SimpleImputer
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer
 from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor
-from category_encoders import TargetEncoder
-from sklearn.preprocessing import OneHotEncoder
-
-
-import warnings
 
 warnings.filterwarnings(
     "ignore",
@@ -36,69 +34,79 @@ warnings.filterwarnings(
     category=FutureWarning,
 )
 
-
-# standard code-template imports
-from ta_lib.core.api import (
-    create_context,
-    get_dataframe,
-    get_feature_names_from_column_transformer,
-    string_cleaning,
-    get_package_path,
-    display_as_tabs,
-    save_pipeline,
-    load_pipeline,
-    initialize_environment,
-    load_dataset,
-    save_dataset,
-    DEFAULT_ARTIFACTS_PATH,
-    list_datasets,
-)
-
-import ta_lib.eda.api as eda
-from xgboost import XGBRegressor
-from ta_lib.regression.api import SKLStatsmodelOLS
-from ta_lib.regression.api import RegressionComparison, RegressionReport
-import ta_lib.reports.api as reports
-from ta_lib.data_processing.api import Outlier
-
 initialize_environment(debug=False, hide_warnings=True)
 
 artifacts_folder = DEFAULT_ARTIFACTS_PATH
 
-config_path = op.join("conf", "config.yml")
+config_path = op.join('/home/rassel/capstone_code_templates_springboard/production/conf', 'config.yml')
 context = create_context(config_path)
 
 ground_truth_for_modelling = load_dataset(
     context, "/ground_truth_for_modelling/ground_truth"
 )
 
-# Creating variables for price of client and competitor
-ground_truth_for_modelling["client_unit_price"] = (
-    ground_truth_for_modelling["client_dollars_value"]
-    / ground_truth_for_modelling["client_units_value"]
-)
-ground_truth_for_modelling["competitor_unit_price"] = (
-    ground_truth_for_modelling["competitor_dollars_value"]
-    / ground_truth_for_modelling["competitor_units_value"]
-)
 
+def create_price_variables(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create price related variables
+
+    Arguments
+    ---------
+    dataframe : pd.DataFrame
+        The dataframe to use for creating the price related variables.
+
+    Returns
+    -------
+    dataframe
+        The processed dataframe
+    """
+    temp_dataframe = dataframe.copy()
+    temp_dataframe["client_unit_price"] = (
+        temp_dataframe["client_dollars_value"]
+        / temp_dataframe["client_units_value"]
+    )
+    temp_dataframe["competitor_unit_price"] = (
+        temp_dataframe["competitor_dollars_value"]
+        / temp_dataframe["competitor_units_value"]
+    )
+    return temp_dataframe
+
+
+ground_truth_for_modelling = create_price_variables(ground_truth_for_modelling)
 ground_truth_for_modelling.drop(columns=["Unnamed: 0"], inplace=True)
 
 
 numerical_features = ground_truth_for_modelling.select_dtypes(include="number")
 
-features = X = ground_truth_for_modelling.drop(columns=["client_lbs_value"])
-target = y = ground_truth_for_modelling["client_lbs_value"]
+
+def create_train_and_test_split(dataframe: pd.DataFrame) -> tuple:
+    """
+    Creates train and test related dataframes.
+
+    Arguments
+    ---------
+    dataframe : pd.DataFrame
+        The base dataframe to use for getting the train and test splits.
+
+    Returns
+    -------
+    tuple
+        The tuple of dataframes after the train and test split has been done.
+    """
+    X = dataframe.drop(columns=["client_lbs_value"])
+    y = dataframe["client_lbs_value"]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.3, random_state=42
+    )
+
+    return X_train, X_test, y_train, y_test
 
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.3, random_state=42
-)
-
+X_train, X_test, y_train, y_test = create_train_and_test_split(ground_truth_for_modelling)
 
 save_dataset(context, X_train, "/train/ground_truth_for_modelling/features")
 save_dataset(context, y_train, "/train/ground_truth_for_modelling/target")
-
 save_dataset(context, X_test, "/test/ground_truth_for_modelling/features")
 save_dataset(context, y_test, "/test/ground_truth_for_modelling/target")
 
@@ -107,7 +115,22 @@ cat_columns = X_train.select_dtypes("object").columns
 num_columns = X_train.select_dtypes("number").columns
 
 
-def one_hot_encode_column(dataframe, cat_variable):
+def one_hot_encode_column(dataframe: pd.DataFrame, cat_variable: str) -> pd.DataFrame:
+    """
+    One hot encodes the categorical column specified.
+
+    Arguments
+    ---------
+    dataframe : pd.DataFrame
+        The dataframe to use.
+    cat_variable: str
+        The categorical variable to one hot encode.
+
+    Returns
+    -------
+    dataframe
+        The one hot encoded dataframe
+    """
     one_hot = pd.get_dummies(dataframe[cat_variable], drop_first=True)
     # Drop column B as it is now encoded
     dataframe = dataframe.drop("theme_name", axis=1)  # Join the encoded df
@@ -115,7 +138,20 @@ def one_hot_encode_column(dataframe, cat_variable):
     return dataframe
 
 
-def engineer_date_related_features(dataframe):
+def engineer_date_related_features(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """
+    Engineers date related features.
+
+    Arguments
+    ---------
+    dataframe : pd.DataFrame
+        The dataframe to use for engineering the date related features.
+
+    Returns
+    -------
+    dataframe
+        The dataframe with the engineered features.
+    """
     temp_dataframe = dataframe.copy()
     temp_dataframe["date"] = pd.to_datetime(temp_dataframe["date"])
     temp_dataframe["year"] = temp_dataframe["date"].dt.year
@@ -147,20 +183,42 @@ feature_engineering_pipeline_test = Pipeline(
 )
 
 X_train = feature_engineering_pipeline_train.fit_transform(X_train)
-X_test = feature_engineering_pipeline_train.fit_transform(X_test)
+X_test = feature_engineering_pipeline_test.fit_transform(X_test)
 
 
-columns_to_drop = ["chewy_searchVolume", "total_searchVolume"]
-X_train.drop(columns=columns_to_drop, inplace=True)
-X_test.drop(columns=columns_to_drop, inplace=True)
+def create_final_set_of_training_and_test_datasets(train_df : pd.DataFrame, test_df: pd.DataFrame) -> tuple:
+    """
+    Create the final training and test datasets.
 
-reg_vars = X_train.columns.tolist()
-X_train = X_train[reg_vars]
-X_test = X_test[reg_vars]
+    Arguments
+    ---------
+    train_df : pd.DataFrame
+        The train dataframe
+    test_df : pd.DataFrame
+        The test dataframe
+
+    Returns
+    -------
+    tuple
+        The tuple of the final training and test datasets.
+
+    """
+    columns_to_drop = ["chewy_searchVolume", "total_searchVolume"]
+    train_df.drop(columns=columns_to_drop, inplace=True)
+    test_df.drop(columns=columns_to_drop, inplace=True)
+
+    reg_vars = train_df.columns.tolist()
+    train_df = train_df[reg_vars]
+    test_df = test_df[reg_vars]
+
+    return train_df, test_df, reg_vars
+
+
+X_train, X_test, reg_vars = create_final_set_of_training_and_test_datasets(X_train, X_test)
 
 
 # Custom Transformations like these can be utilised
-def _custom_data_transform(df, cols2keep=None):
+def _custom_data_transform(df: pd.DataFrame, cols2keep=None):
     """Transformation to drop some columns in the data
 
     Parameters
@@ -181,6 +239,7 @@ imp_features = [
     "total_post",
     "google_searchVolume",
 ]
+
 
 reg_ppln_ols = Pipeline(
     [
@@ -333,4 +392,3 @@ xgb_report = RegressionReport(
     refit=True,
 )
 xgb_report.get_report(include_shap=False, file_path="xgb_report")
-
